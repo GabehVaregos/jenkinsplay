@@ -1,0 +1,229 @@
+<?xml version="1.0"?>
+<project name="Broker.Build.Automation" default="master.build">
+
+	<macrodef name="resolve_jar_depencies">
+		<attribute name="sourcePathProject"/>
+		<attribute name="compilePathProject"/>
+		<sequential>		
+			<echo message="Resolviendo dependencias de jars para proyecto (sourcePathProject) ->@{sourcePathProject}"/>				
+			<echo message="Directorio de compilacion (compilePathProject) ->@{compilePathProject}"/>		
+			<available file="@{sourcePathProject}/.classpath"  property="ExistsClassPathFile"/>			
+			<if>
+				<equals arg1="${ExistsClassPathFile}" arg2="true"/> 	
+				<then>
+					<echo message="Se encontro .classpath en proyecto"/>	
+					<mkdir dir="${env.WORKSPACE}/COMPILE/.metadata/.plugins/org.eclipse.core.runtime/.settings"/>
+					<copy file="${External_Jars}/config_external_jars_variables/org.eclipse.jdt.core.prefs" todir="${env.WORKSPACE}/COMPILE/.metadata/.plugins/org.eclipse.core.runtime/.settings"/>
+				</then> 
+				<else>
+					<echo message="No se encontro .classpath en proyecto"/>
+				</else>
+			</if>
+		</sequential>		
+	</macrodef>	
+
+	<macrodef name="resolve_depencies">
+		<attribute name="dirProyecto"/>
+		<attribute name="nombreProyecto"/>
+
+		<sequential>
+
+			<echo  message="Resolviendo dependencias para Proyecto: @{dirProyecto}  file=${revision.build}" />
+
+			<echo  message="Leyendo dependencias de archivo: @{dirProyecto}/.project" />
+
+			<xmltask source="@{dirProyecto}/*.project">
+				<call path="/projectDescription/projects/project">
+					<param name="nombre" path="text()" />
+					<actions>
+						<echo message="Buscando en  workspace proyecto @{nombre}" />
+						<for param="directorio">
+							<path>
+								<dirset dir="${env.WORKSPACE}">
+									<include name="**/@{nombre}"/>
+									<exclude name="**/COMPILE"/>
+								</dirset>
+							</path>				
+							<sequential>
+								<echo message="Proyecto Dependiente:@{nombre}" file="${revision.build}" append="true"/>
+								<if>	
+									<not>
+										<available file="${env.WORKSPACE}/COMPILE/@{nombre}" type="dir"/>
+									</not>
+															 
+									<then>
+										<echo message="Copiando @{directorio} en  ${env.WORKSPACE}/COMPILE/@{nombre}" />
+										<if>		
+											<available file="@{directorio}/Fuentes/@{nombre}" type="dir"/>
+											<then>
+												<copy todir="${env.WORKSPACE}/COMPILE//@{nombre}">
+													<fileset dir="@{directorio}/Fuentes/@{nombre}"/>
+												</copy>
+
+												<echo message=" Copiando @{directorio}/Fuentes/@{nombre} a ${env.WORKSPACE}/COMPILE//@{nombre}"/> 
+												
+												<resolve_depencies	dirProyecto="@{directorio}/Fuentes/@{nombre}" nombreProyecto="@{nombre}"/>				 						
+											</then>
+											<else>
+												<if>		
+													<available file="@{directorio}/Fuentes" type="dir"/>
+													<then>
+														<copy todir="${env.WORKSPACE}/COMPILE/@{nombre}">
+															<fileset dir="@{directorio}/Fuentes"/>
+														</copy>
+														
+														<echo message=" Copiando @{directorio}/Fuentes a ${env.WORKSPACE}/COMPILE//@{nombre}"/> 
+
+														<resolve_depencies	dirProyecto="@{directorio}/Fuentes" nombreProyecto="@{nombre}"/>
+													</then>
+													<else>
+														<copy todir="${env.WORKSPACE}/COMPILE/@{nombre}">
+															<fileset dir="@{directorio}"/>
+														</copy>
+														
+														<echo message=" Copiando @{directorio} a ${env.WORKSPACE}/COMPILE//@{nombre}"/> 														
+														
+														<resolve_depencies	dirProyecto="@{directorio}" nombreProyecto="@{nombre}"/>
+													</else>														
+												</if>	
+											</else>	
+										</if>
+									</then>
+									<else>
+										<echo message="Proyecto @{directorio} ya copiado a ${env.WORKSPACE}/COMPILE/@{nombre}" />	
+										 
+				 
+										<resolve_depencies	dirProyecto="@{directorio}" nombreProyecto="@{nombre}"/>										
+									</else>
+								</if>
+
+							</sequential>							
+						</for>
+					</actions>
+				</call>
+			</xmltask>
+		</sequential>
+	</macrodef>
+
+	<target name="master.build" description="This parent ant target executes the build, override and deploy ant targets.">
+
+		<taskdef resource="net/sf/antcontrib/antcontrib.properties"/>
+		<taskdef resource="net/sf/antcontrib/antlib.xml"/>
+		<taskdef name="xmltask" classname="com.oopsconsultancy.xmltask.ant.XmlTask"/>
+		<property environment="env"/>
+																						   
+																		 
+		<property name="user.home" value="${env.WORKSPACE}" />
+		<property name="broker.bar.home" value="${env.WORKSPACE}/BAR_DIR" />
+		<property name="broker.Service.name" value="${env.Service}" />
+		<property name="broker.deploy.type" value="${env.DEPLOY_TYPE}" />
+		<property name="broker.compile.home" value="${env.WORKSPACE}/COMPILE" />
+		<property name="broker.Service.build.home" value="${env.WORKSPACE}/${env.Service}" />
+		<property name="toolkit.workspace" value="${env.WORKSPACE}" />
+		<property name="ant.bars.basedir" value="${broker.bar.home}/bars"/>
+		<property name="revision.build" value="${env.WORKSPACE}/revision_${env.GIT_COMMIT}.rev" />
+		<property name="platform.folder" value="${env.BUILDFOLDER}" />
+		
+		<property name="External_Jars" value="/home/jenkins/jars_from_terceros" />	
+																											
+
+		<property name="serviceCompilePath" value="${env.WORKSPACE}/COMPILE" />		
+
+		<delete dir="${serviceCompilePath}"/>   
+		<delete dir="${broker.bar.home}"/>  	
+
+		<available file="${env.WORKSPACE}/bibliotecas/${env.Service}" type="dir" property="isLibrary"/>	
+		<if>
+			<equals arg1="${isLibrary}" arg2="true" /> 
+			<then>
+				<property name="pathname.service.repo" value="bibliotecas" />					
+			</then>					
+			<else>
+				<property name="pathname.service.repo" value="servicios" />								
+			</else>
+		</if>	
+
+        <property name="toolkit.home" value="/home/jenkins/IBM/${platform.folder}/tools"/>
+
+		<antcall target="Resolve.Dependencies"/>
+	</target>
+
+	<target name="Resolve.Dependencies" description="Configuracion de depencias de proyectos IIB.">	
+
+		<echo message="Resolviendo dependencias ...." />
+
+			
+
+		<mkdir dir="${serviceCompilePath}"/>
+
+		<echo message="Copiando proyecto nombreProyecto:${env.Service} a ${env.WORKSPACE}/COMPILE" />	
+
+		<available file="${env.WORKSPACE}/${pathname.service.repo}/${env.Service}/Fuentes/${env.Service}" type="dir" property="moreThanOneProject"/>	
+		<if>
+			<equals arg1="${moreThanOneProject}" arg2="true" /> 
+			<then>
+				<property name="serviceCodePath"  value="${env.WORKSPACE}/${pathname.service.repo}/${env.Service}/Fuentes/${env.Service}" />	
+				<copy todir="${serviceCompilePath}">
+					<fileset dir="${env.WORKSPACE}/${pathname.service.repo}/${env.Service}/Fuentes/"/>
+				</copy>				
+			</then>					
+			<else>
+				<property name="serviceCodePath" value="${env.WORKSPACE}/${pathname.service.repo}/${env.Service}/Fuentes"/>		
+				<copy todir="${serviceCompilePath}/${env.Service}">
+					<fileset dir="${serviceCodePath}"/>
+				</copy>				
+			</else>
+		</if>	
+
+		<echo message="Resolviendo dependencias de proyecto nombreProyecto${env.Service}" />	
+			
+		<resolve_depencies dirProyecto="${serviceCodePath}" nombreProyecto="${env.Service}"/>
+
+		<echo message="Seteando variable de enterno en toolkit para librerias externas" />		
+
+		<mkdir dir="${env.WORKSPACE}/COMPILE/.metadata/.plugins/org.eclipse.core.runtime/.settings"/>
+		<copy file="${External_Jars}/config_external_jars_variables/org.eclipse.jdt.core.prefs" todir="${env.WORKSPACE}/COMPILE/.metadata/.plugins/org.eclipse.core.runtime/.settings"/>
+																																											  
+
+		<exec executable="git"  dir="${env.WORKSPACE}" output="${revision.build}" append="true">
+			<arg value="log"/>
+			<arg value="-4"/>
+			<arg value="${pathname.service.repo}/${env.Service}"/>
+		</exec>
+		<echo message="Dependencias configuradas...." />	
+		<antcall target="mqsicreatebar.buildbar"/>
+	</target>
+
+	<target name="mqsicreatebar.buildbar" description="This ant target creates the BAR files using mqsicreatebar with referencing all required projects.">	
+		<echo message="Ejecutando Build...." />
+		<echo message="${toolkit.home}/mqsicreatebar -data ${broker.compile.home} -b ${broker.bar.home}/${broker.Service.name}.bar -a ${broker.Service.name} -cleanbuild -deployAsSource -trace"/>	
+		<exec executable="${toolkit.home}/mqsicreatebar" spawn="false" failonerror="true" vmlauncher="false">	
+			<arg value="-cleanbuild" />
+			<arg value="-data"/>
+			<arg value="${broker.compile.home}"/>
+			<arg value="-b" />
+			<arg value="${broker.bar.home}/${broker.Service.name}.bar" />
+			<arg value="-a" />
+			<arg value="${broker.Service.name}" />
+			<arg value="-deployAsSource" />
+			<arg value="-trace" />
+		</exec>
+		<echo message="Completed creating broker archive(BAR) file ${exec_grp@{var-exec-grp-num}.bar.file.name}." />
+		<antcall target="zip"/>		
+	</target>
+
+	<target name="zip" description="Making Service Zip File.........">	
+		<property name="buildDirectory" value="${env.WORKSPACE}\..\..\jobs\${env.JOB_NAME}\builds\${env.BUILD_ID}" />			
+		<property name="zipDirectory" value="${broker.bar.home}/ZIP" />	
+		<echo message="Generando Directorio para Zip en directorio:${zipDirectory}" />
+		<mkdir dir="${zipDirectory}"/>
+		<copy todir="${zipDirectory}">
+			<fileset dir="${broker.bar.home}" includes="*bar"/>
+			<fileset dir="${toolkit.workspace}/${pathname.service.repo}/${broker.Service.name}/Config" includes="*" excludes="*bar"/>			
+			<fileset file="${revision.build}"/>						
+		</copy>
+		<tar destfile="${broker.bar.home}/${broker.Service.name}.tar.gz" basedir="${zipDirectory}" compression="gzip"/>
+	</target>
+
+
+</project>
