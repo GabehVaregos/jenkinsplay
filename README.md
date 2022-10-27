@@ -1,4 +1,6 @@
-# jenkinsplay
+# JenkinsPlay
 
-- Recrear el archivo target/example.txt utilizando bash script y ANT script
-- Crear un tar con todos los archivos dentro y luego guardar el artefacto en jenkins para poder descargarlo
+- Recrear el archivo target/example.txt utilizando Python
+- Recrear el archivo target/example.txt utilizando Bash script
+- Recrear el archivo target/example.txt utilizando ANT script
+- Crear un tar con todos los 3 archivos origen y el target dentro y luego guardar el artefacto en Jenkins para poder descargarlo manualmente
